@@ -37,11 +37,10 @@ struct rgb
 
 struct figure
 {
-	struct vec2 points[4];
-	struct vec2 points90[4];
+	struct vec2 points[2][4];
 	struct rgb color;
+	struct vec2 size;
 	int state;
-	int size;
 }cur_figure;
 
 struct list
@@ -53,14 +52,14 @@ struct list
 
 /* blocks */
 struct figure figures[7]  = {
-	/*      figure points       |   turned figure points   |      color     | state | size */
-	{ {{2,1},{2,2},{2,3},{3,3}}, {{1,2},{2,2},{3,2},{3,1}}, {0.3f,0.8f,0.3f},    0,    3 }, /* L */
-	{ {{2,1},{2,2},{2,3},{1,3}}, {{1,1},{1,2},{2,2},{3,2}}, {0.3f,0.3f,0.8f},    0,    3 }, /* J */
-	{ {{2,1},{2,2},{2,3},{2,4}}, {{1,2},{2,2},{3,2},{4,2}}, {0.5f,0.8f,0.3f},    0,    4 }, /* I */
-	{ {{1,1},{2,1},{2,2},{3,2}}, {{1,2},{2,2},{2,1},{1,3}}, {0.8f,0.0f,0.0f},    0,    3 }, /* Z */
-	{ {{1,2},{2,2},{2,1},{3,1}}, {{1,1},{2,1},{2,2},{3,2}}, {0.0f,0.8f,0.0f},    0,    3 }, /* S */
-	{ {{1,2},{2,2},{3,2},{2,1}}, {{2,1},{2,2},{2,3},{3,2}}, {0.3f,0.5f,0.5f},    0,    3 }, /* T */
-	{ {{1,1},{2,1},{1,2},{2,2}}, {{1,1},{2,1},{1,2},{2,2}}, {0.5f,0.5f,0.0f},    0,    2 }  /* O */
+	/*      figure points       |   turned figure points   |      color   */
+	{ { {{1,2},{2,2},{3,2},{3,1}}, {{2,1},{2,2},{2,3},{3,3}} }, {0.3f,0.8f,0.3f}, {3,3}, 0 }, /* L */
+	{ { {{1,1},{1,2},{2,2},{3,2}}, {{3,1},{2,1},{2,2},{2,3}} }, {0.3f,0.3f,0.8f}, {3,3}, 0 }, /* J */
+	{ { {{1,2},{2,2},{3,2},{4,2}}, {{2,1},{2,2},{2,3},{2,4}} }, {0.5f,0.8f,0.3f}, {4,3}, 0 }, /* I */
+	{ { {{1,1},{2,1},{2,2},{3,2}}, {{2,1},{2,2},{1,2},{1,3}} }, {0.8f,0.0f,0.0f}, {3,2}, 0 }, /* Z */
+	{ { {{1,2},{2,2},{2,1},{3,1}}, {{1,1},{1,2},{2,2},{2,3}} }, {0.0f,0.8f,0.0f}, {3,2}, 0 }, /* S */
+	{ { {{1,2},{2,2},{3,2},{2,3}}, {{1,2},{2,1},{2,2},{2,3}} }, {0.3f,0.5f,0.5f}, {3,3}, 0 }, /* T */
+	{ { {{1,1},{2,1},{1,2},{2,2}}, {{1,1},{2,1},{1,2},{2,2}} }, {0.5f,0.5f,0.0f}, {2,2}, 0 }  /* O */
 };
 
 /* lists stuff */
@@ -234,35 +233,46 @@ struct vec2 local2global(double x,double y)
 	return global_coord;
 }
 
-void fig_flip_x(struct vec2 p[4],int size)
+void fig_flip(struct vec2 p[4],struct vec2 size,int state)
 {
+	int width;
+	int height;
 	int i;
-	for(i=0;i<4;i++)
-		p[i].x = size - p[i].x + 1;
-}
-void fig_flip_y(struct vec2 p[4],int size)
-{
-	int i;
-	for(i=0;i<4;i++)
-		p[i].y = size - p[i].y + 1;
-}
 
+	if(state == 0)
+	{
+		width = size.x;
+		height = size.y;
+	}
+	else
+	{
+		width = size.y;
+		height = size.x;
+	}
+
+
+	for(i=0;i<4;i++)
+	{
+		p[i].x = width - p[i].x + 1;
+		p[i].y = height - p[i].y + 1;
+	}
+}
 struct vec2 fig_size(unsigned int n)
 {
 	struct vec2 size;
 
-	size.x = cur_figure.points[0].x;
+	size.x = cur_figure.points[cur_figure.state][0].x;
 
 	int i;
 	for(i=1;i<4;i++)
-		if(cur_figure.points[i].x > size.x)
-			size.x = cur_figure.points[i].x;
+		if(cur_figure.points[cur_figure.state][i].x > size.x)
+			size.x = cur_figure.points[cur_figure.state][i].x;
 
-	size.y = cur_figure.points[0].y;
+	size.y = cur_figure.points[cur_figure.state][0].y;
 
 	for(i=1;i<4;i++)
-		if(cur_figure.points[i].y > size.y)
-			size.y = cur_figure.points[i].y;
+		if(cur_figure.points[cur_figure.state][i].y > size.y)
+			size.y = cur_figure.points[cur_figure.state][i].y;
 
 	return size;
 }
@@ -298,6 +308,7 @@ int fig_check_collision_x(int figx,int figy)
 {
 	struct list* it;
 	int i;
+	int s = cur_figure.state;
 
 	for(i=0;i<4;i++)
 	{
@@ -305,11 +316,11 @@ int fig_check_collision_x(int figx,int figy)
 
 		while(it)
 		{
-			if(cur_figure.points[i].y+figy == it->pos.y)
+			if(cur_figure.points[s][i].y+figy == it->pos.y)
 			{
-				if(cur_figure.points[i].x+figx+1 == it->pos.x)
+				if(cur_figure.points[s][i].x+figx+1 == it->pos.x)
 						return 1;
-				if(cur_figure.points[i].x+figx-1 == it->pos.x)
+				if(cur_figure.points[s][i].x+figx-1 == it->pos.x)
 						return 2;
 			}
 			it = it->next;
@@ -323,6 +334,7 @@ int fig_check_collision_y(int figx,int figy)
 {
 	struct list* it;
 	int i;
+	int s = cur_figure.state;
 
 	for(i=0;i<4;i++)
 	{
@@ -330,7 +342,7 @@ int fig_check_collision_y(int figx,int figy)
 
 		while(it)
 		{
-			if(cur_figure.points[i].x+figx == it->pos.x && cur_figure.points[i].y+figy+1 == it->pos.y)
+			if(cur_figure.points[s][i].x+figx == it->pos.x && cur_figure.points[s][i].y+figy+1 == it->pos.y)
 				return 1;
 
 			it = it->next;
@@ -360,9 +372,10 @@ double get_highest(void)
 
 void fig_fallen(void)
 {
+	int s = cur_figure.state;
 	int i;
 	for(i=0;i<4;i++)
-		l_append(cur_figure.points[i].x+gx,cur_figure.points[i].y+gy,cur_figure.color);
+		l_append(cur_figure.points[s][i].x+gx,cur_figure.points[s][i].y+gy,cur_figure.color);
 }
 
 int win_resize(int new_width,int new_height)
@@ -407,16 +420,9 @@ void on_key(SDL_keysym *keysym)
 			gx++;
 		break;
 	case SDLK_UP:
-		if(cur_figure.state == 0)
-		{
-			cur_figure.state = 1;
-			fig_flip_x(cur_figure.points90,cur_figure.size);
-		}
-		else
-		{
-			cur_figure.state = 0;
-			fig_flip_y(cur_figure.points,cur_figure.size);
-		}
+		cur_figure.state = !cur_figure.state;
+
+		fig_flip(cur_figure.points[cur_figure.state],cur_figure.size,cur_figure.state);
 		break;
 	case SDLK_DOWN:
 		break;
@@ -537,15 +543,11 @@ void draw_block(double x,double y,struct rgb color)
 
 void draw_figure(double fig_x,double fig_y)
 {
-	struct vec2 *pp;
-	if(cur_figure.state == 0)
-		pp = cur_figure.points;
-	else
-		pp = cur_figure.points90;
-
 	int i;
 	for(i=0;i<4;i++)
-		draw_block((pp+i)->x+fig_x, (pp+i)->y+fig_y, cur_figure.color);
+		draw_block(cur_figure.points[cur_figure.state][i].x+fig_x,
+				   cur_figure.points[cur_figure.state][i].y+fig_y,
+				   cur_figure.color);
 }
 
 int render(GLvoid)
@@ -613,7 +615,7 @@ int main( int argc, char **argv )
 
 	gx = 4.0f;
 	gy = 0.0f;
-	speed = 500;
+	speed = 1000;
 	ticks = 0;
 	fi = 0;
 	cur_figure = figures[fi];
@@ -684,7 +686,7 @@ int main( int argc, char **argv )
 
 		if( (SDL_GetTicks() - ticks) >= speed )
 		{
-//			gy++;
+			gy++;
 			ticks = SDL_GetTicks();
 
 			check_fill();
