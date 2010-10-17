@@ -3,6 +3,7 @@
 #include <GL/gl.h>
 #include <GL/glu.h>
 #include <SDL.h>
+#include <time.h>
 
 #define SCREEN_WIDTH  640
 #define SCREEN_HEIGHT 480
@@ -21,8 +22,9 @@ double gy;
 unsigned int fi;
 unsigned int speed;
 unsigned int ticks;
-/* basic game structures */
+unsigned int score;
 
+/* basic game structures */
 struct vec2
 {
 	double x;
@@ -233,28 +235,28 @@ struct vec2 local2global(double x,double y)
 	return global_coord;
 }
 
-void fig_flip(struct vec2 p[4],struct vec2 size,int state)
+void fig_flip(struct figure* f)
 {
 	int width;
 	int height;
 	int i;
 
-	if(state == 0)
+	if(f->state == 0)
 	{
-		width = size.x;
-		height = size.y;
+		width = f->size.x;
+		height = f->size.y;
 	}
 	else
 	{
-		width = size.y;
-		height = size.x;
+		width = f->size.y;
+		height = f->size.x;
 	}
 
 
 	for(i=0;i<4;i++)
 	{
-		p[i].x = width - p[i].x + 1;
-		p[i].y = height - p[i].y + 1;
+		f->points[f->state][i].x = width - f->points[f->state][i].x + 1;
+		f->points[f->state][i].y = height - f->points[f->state][i].y + 1;
 	}
 }
 struct vec2 fig_size(unsigned int n)
@@ -298,10 +300,37 @@ int check_fill(void)
 
 				iter = iter->next;
 			}
+
+			score+=(1000/speed)*10;
 		}
 	}
 
 	return 1;
+}
+
+int fig_check_collision_turn(int fig_x,int fig_y)
+{
+	struct figure f = cur_figure;
+	fig_flip(&f);
+
+	int i;
+	struct list* iter = l_root;
+	while(iter)
+	{
+		for(i=0;i<4;i++)
+		{
+			if((iter->pos.x == f.points[f.state][i].x+fig_x &&
+				iter->pos.y == f.points[f.state][i].y+fig_y) ||
+				f.points[f.state][i].x+fig_x < 1 ||
+			    f.points[f.state][i].x+fig_x > 10 ||
+			    f.points[f.state][i].y + fig_y > 20)
+				return 1;
+		}
+
+		iter = iter->next;
+	}
+
+	return 0;
 }
 
 int fig_check_collision_x(int figx,int figy)
@@ -312,6 +341,11 @@ int fig_check_collision_x(int figx,int figy)
 
 	for(i=0;i<4;i++)
 	{
+		if(cur_figure.points[s][i].x+figx+1 > 10)
+			return 1;
+		if(cur_figure.points[s][i].x+figx-1 < 1)
+			return 2;
+
 		it = l_root;
 
 		while(it)
@@ -401,6 +435,34 @@ int win_resize(int new_width,int new_height)
     return TRUE;
 }
 
+unsigned int on_timer(unsigned int interval,void* param)
+{
+
+	return interval;
+}
+
+void on_collision(void)
+{
+	if( (gy == (20 - fig_size(fi).y)) || (fig_check_collision_y(gx,gy) == 1))
+	{
+		fig_fallen();
+
+
+		if(score % 100 == 0 && score>0 && speed > 50)
+			speed -= 50;
+
+		char win_caption[256];
+		snprintf(win_caption,200,"Score: %i   JACOTetris    Speed: %i",score,speed);
+		SDL_WM_SetCaption(win_caption,NULL);
+
+		fi = rand() % 7;
+		cur_figure = figures[fi];
+
+		gy=-3;
+		gx= 5 - cur_figure.size.x;
+	}
+}
+
 void on_key(SDL_keysym *keysym)
 {
     switch (keysym->sym)
@@ -412,19 +474,28 @@ void on_key(SDL_keysym *keysym)
 	    SDL_WM_ToggleFullScreen(surface);
 	    break;
 	case SDLK_LEFT:
-		if(gx>0 && fig_check_collision_x(gx,gy)!=2)
+		if(fig_check_collision_x(gx,gy)!=2)
 			gx--;
 		break;
+		on_collision();
 	case SDLK_RIGHT:
-		if(gx < (10-fig_size(fi).x) && fig_check_collision_x(gx,gy)!=1)
+		if(fig_check_collision_x(gx,gy)!=1)
 			gx++;
+		on_collision();
 		break;
 	case SDLK_UP:
 		cur_figure.state = !cur_figure.state;
 
-		fig_flip(cur_figure.points[cur_figure.state],cur_figure.size,cur_figure.state);
+		if(fig_check_collision_turn(gx,gy) == 0)
+			fig_flip(&cur_figure);
+		else
+			cur_figure.state = !cur_figure.state;
+
+		on_collision();
 		break;
 	case SDLK_DOWN:
+		gy++;
+		on_collision();
 		break;
 	case SDLK_q:
 		if(fi<6)
@@ -442,23 +513,6 @@ void on_key(SDL_keysym *keysym)
 		break;
 	default:
 	    break;
-	}
-}
-
-unsigned int on_timer(unsigned int interval,void* param)
-{
-
-	return interval;
-}
-
-void on_collision(void)
-{
-	if( (gy == (20 - fig_size(fi).y)) || (fig_check_collision_y(gx,gy) == 1))
-	{
-		fig_fallen();
-		gy=0;
-		gx=5;
-		cur_figure = figures[fi];
 	}
 }
 
@@ -611,14 +665,17 @@ int main( int argc, char **argv )
     int done = FALSE;
     int isActive = TRUE;
 
-	l_root = NULL;
+	srand(time(NULL));
 
+	l_root = NULL;
 	gx = 4.0f;
 	gy = 0.0f;
 	speed = 1000;
 	ticks = 0;
-	fi = 0;
+	score = 0;
+	fi = rand() % 7;
 	cur_figure = figures[fi];
+
 
 	printf("%s","Video initialization...");
 	init_gfx();
