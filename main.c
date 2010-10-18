@@ -9,8 +9,18 @@
 #define SCREEN_HEIGHT 480
 #define SCREEN_BPP     24
 
-#define TRUE  1
+#define TRUE 1
 #define FALSE 0
+
+/* shape colors*/
+#define COLOR_BG   0.12f, 0.14f, 0.13f
+#define COLOR_L  { 0.50f, 0.62f, 0.50f }
+#define COLOR_J  { 0.37f, 0.70f, 0.54f }
+#define COLOR_I  { 0.94f, 0.88f, 0.67f }
+#define COLOR_Z  { 0.55f, 0.82f, 0.83f }
+#define COLOR_S  { 0.58f, 0.75f, 0.95f }
+#define COLOR_T  { 0.86f, 0.64f, 0.64f }
+#define COLOR_O  { 0.44f, 0.31f, 0.31f }
 
 /*  OpenGL and SDL stuff   */
 SDL_Surface *surface;
@@ -55,13 +65,13 @@ struct list
 /* blocks */
 struct figure figures[7]  = {
 	/*      figure points       |   turned figure points   |      color   */
-	{ { {{1,2},{2,2},{3,2},{3,1}}, {{2,1},{2,2},{2,3},{3,3}} }, {0.3f,0.8f,0.3f}, {3,3}, 0 }, /* L */
-	{ { {{1,1},{1,2},{2,2},{3,2}}, {{3,1},{2,1},{2,2},{2,3}} }, {0.3f,0.3f,0.8f}, {3,3}, 0 }, /* J */
-	{ { {{1,2},{2,2},{3,2},{4,2}}, {{2,1},{2,2},{2,3},{2,4}} }, {0.5f,0.8f,0.3f}, {4,3}, 0 }, /* I */
-	{ { {{1,1},{2,1},{2,2},{3,2}}, {{2,1},{2,2},{1,2},{1,3}} }, {0.8f,0.0f,0.0f}, {3,2}, 0 }, /* Z */
-	{ { {{1,2},{2,2},{2,1},{3,1}}, {{1,1},{1,2},{2,2},{2,3}} }, {0.0f,0.8f,0.0f}, {3,2}, 0 }, /* S */
-	{ { {{1,2},{2,2},{3,2},{2,3}}, {{1,2},{2,1},{2,2},{2,3}} }, {0.3f,0.5f,0.5f}, {3,3}, 0 }, /* T */
-	{ { {{1,1},{2,1},{1,2},{2,2}}, {{1,1},{2,1},{1,2},{2,2}} }, {0.5f,0.5f,0.0f}, {2,2}, 0 }  /* O */
+	{ { {{1,2},{2,2},{3,2},{3,1}}, {{2,1},{2,2},{2,3},{3,3}} }, COLOR_L, {3,3}, 0 }, /* L */
+	{ { {{1,1},{1,2},{2,2},{3,2}}, {{3,1},{2,1},{2,2},{2,3}} }, COLOR_J, {3,3}, 0 }, /* J */
+	{ { {{1,2},{2,2},{3,2},{4,2}}, {{2,1},{2,2},{2,3},{2,4}} }, COLOR_I, {4,3}, 0 }, /* I */
+	{ { {{1,1},{2,1},{2,2},{3,2}}, {{2,1},{2,2},{1,2},{1,3}} }, COLOR_Z, {3,2}, 0 }, /* Z */
+	{ { {{1,2},{2,2},{2,1},{3,1}}, {{1,1},{1,2},{2,2},{2,3}} }, COLOR_S, {3,2}, 0 }, /* S */
+	{ { {{1,2},{2,2},{3,2},{2,3}}, {{1,2},{2,1},{2,2},{2,3}} }, COLOR_T, {3,3}, 0 }, /* T */
+	{ { {{1,1},{2,1},{1,2},{2,2}}, {{1,1},{2,1},{1,2},{2,2}} }, COLOR_O, {2,2}, 0 }  /* O */
 };
 
 /* lists stuff */
@@ -279,7 +289,6 @@ struct vec2 fig_size(unsigned int n)
 	return size;
 }
 
-
 int check_fill(void)
 {
 	int j;
@@ -452,7 +461,7 @@ void on_collision(void)
 			speed -= 50;
 
 		char win_caption[256];
-		snprintf(win_caption,200,"Score: %i   JACOTetris    Speed: %i",score,speed);
+		snprintf(win_caption,200,"Score: %i | Zenburn Tetris | Speed: %i",score,speed);
 		SDL_WM_SetCaption(win_caption,NULL);
 
 		fi = rand() % 7;
