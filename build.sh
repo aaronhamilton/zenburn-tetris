@@ -1,2 +1,2 @@
 #!/bin/bash
- gcc -Wall -g `sdl-config --cflags --libs` -o tetris -lGL -lSDL -lGLU main.c
+ gcc -Wall -g `sdl-config --cflags --libs` `pkg-config --cflags --libs ftgl` -o tetris -lGL  -lGLU main.c

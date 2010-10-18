@@ -3,6 +3,7 @@
 #include <GL/gl.h>
 #include <GL/glu.h>
 #include <SDL.h>
+#include <FTGL/ftgl.h>
 #include <time.h>
 
 #define SCREEN_WIDTH  640
@@ -25,6 +26,7 @@
 /*  OpenGL and SDL stuff   */
 SDL_Surface *surface;
 int videoFlags;
+FTGLfont* Font;
 
 /* global game variables */
 double gx;
@@ -234,6 +236,7 @@ unsigned int l_count(double x,double y)
 
 void quit(int ret_code)
 {
+	ftglDestroyFont(Font);
     SDL_Quit();
     exit(ret_code);
 }
@@ -456,13 +459,15 @@ void on_collision(void)
 	{
 		fig_fallen();
 
+		if(gy<1)
+		{
+			printf("Loser!\n");
+			quit(0);
+		}
+
 
 		if(score % 100 == 0 && score>0 && speed > 50)
 			speed -= 50;
-
-		char win_caption[256];
-		snprintf(win_caption,200,"Score: %i | Zenburn Tetris | Speed: %i",score,speed);
-		SDL_WM_SetCaption(win_caption,NULL);
 
 		fi = rand() % 7;
 		cur_figure = figures[fi];
@@ -536,6 +541,7 @@ int init_gfx(GLvoid)
 	    quit( 1 );
 	}
 
+
     videoInfo = SDL_GetVideoInfo( );
 
     if ( !videoInfo )
@@ -582,6 +588,10 @@ int init_gfx(GLvoid)
 
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
+	glEnable(GL_TEXTURE_2D);
+
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
 
@@ -658,6 +668,16 @@ int render(GLvoid)
 		glEnd();
 	}
 
+	/* draw scores and level */
+	glColor3f(1.0,1.0,1.0);
+	char tmp[128];
+	snprintf(tmp,120,"Score: %i",score);
+	glRasterPos3f(6.0,1.0,0.0);
+	ftglRenderFont(Font, tmp, FTGL_RENDER_ALL);
+	snprintf(tmp,120,"Level: %i",100 - speed/10);
+	glRasterPos3f(6.0,2.0,0.0);
+	ftglRenderFont(Font, tmp, FTGL_RENDER_ALL);
+
     /* Draw it to the screen */
     SDL_GL_SwapBuffers( );
 
@@ -686,8 +706,18 @@ int main( int argc, char **argv )
 	cur_figure = figures[fi];
 
 
+
 	printf("%s","Video initialization...");
 	init_gfx();
+
+	if(!(Font=ftglCreatePixmapFont("Terminus.ttf")))
+	{
+		printf("\n%s\n","Can not load font");
+		return 1;
+	}
+	ftglSetFontFaceSize(Font, 14, 14);
+
+	SDL_WM_SetCaption("Zenburn Tetris",NULL);
 	printf("%s","OK\n");
 
 	/*
