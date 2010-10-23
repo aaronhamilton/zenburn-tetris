@@ -1,2 +1,4 @@
 This is just another tetris clone written in C using OpenG and SDL.
 to build the game run "build.sh"
+
+Controls: left,right - move; up - turn; down - drop

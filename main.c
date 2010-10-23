@@ -3,7 +3,6 @@
 #include <GL/gl.h>
 #include <GL/glu.h>
 #include <SDL.h>
-#include <FTGL/ftgl.h>
 #include <time.h>
 
 #define SCREEN_WIDTH  640
@@ -15,6 +14,7 @@
 
 /* shape colors*/
 #define COLOR_BG   0.12f, 0.14f, 0.13f
+#define COLOR_TEXT 0.94f, 0.87f, 0.69f
 #define COLOR_L  { 0.50f, 0.62f, 0.50f }
 #define COLOR_J  { 0.37f, 0.70f, 0.54f }
 #define COLOR_I  { 0.94f, 0.88f, 0.67f }
@@ -26,7 +26,6 @@
 /*  OpenGL and SDL stuff   */
 SDL_Surface *surface;
 int videoFlags;
-FTGLfont* Font;
 
 /* global game variables */
 double gx;
@@ -42,6 +41,7 @@ struct vec2
 	double x;
 	double y;
 };
+
 struct rgb
 {
 	float r;
@@ -57,12 +57,21 @@ struct figure
 	int state;
 }cur_figure;
 
+struct font
+{
+	GLuint texture;
+	GLuint list_base;
+}game_font;
+
 struct list
 {
 	struct vec2 pos;
 	struct rgb color;
 	struct list* next;
 }*l_root;
+
+/* proto */
+void font_destroy(struct font*);
 
 /* blocks */
 struct figure figures[7]  = {
@@ -236,7 +245,8 @@ unsigned int l_count(double x,double y)
 
 void quit(int ret_code)
 {
-	ftglDestroyFont(Font);
+	font_destroy(&game_font);
+	printf("%s\n","Good bye!");
     SDL_Quit();
     exit(ret_code);
 }
@@ -508,7 +518,9 @@ void on_key(SDL_keysym *keysym)
 		on_collision();
 		break;
 	case SDLK_DOWN:
-		gy++;
+		while((fig_check_collision_y(gx,gy) == 0) && gy < (20-fig_size(fi).y))
+			gy++;
+
 		on_collision();
 		break;
 	case SDLK_q:
@@ -530,26 +542,139 @@ void on_key(SDL_keysym *keysym)
 	}
 }
 
+int font_load(char* file,struct font* ft_out)
+{
+	FILE* fp;
+
+	unsigned short int bfType;
+    long int bfOffBits;
+    short int biPlanes;
+    short int biBitCount;
+    long int biSizeImage;
+
+	struct texture
+	{
+		int height;
+		int width;
+		unsigned char* data;
+	}font_texture;
+
+	if ((fp = fopen(file, "rb")) == NULL)
+        return -1;
+
+    if(!fread(&bfType, sizeof(short int), 1, fp))
+        return -1;
+
+    if (bfType != 19778)
+        return -1;
+
+	fseek(fp, 8, SEEK_CUR);
+
+	fread(&bfOffBits, sizeof(long int), 1, fp);
+
+	fseek(fp,4,SEEK_CUR);
+
+	fread(&font_texture.width, sizeof(int), 1, fp);
+    fread(&font_texture.height, sizeof(int), 1, fp);
+
+	fread(&biPlanes, sizeof(short int), 1, fp);
+    if (biPlanes != 1)
+        return -1;
+
+    fread(&biBitCount, sizeof(short int), 1, fp);
+
+    if (biBitCount != 24)
+		return -1;
+
+    biSizeImage = font_texture.width * font_texture.height * 3;
+    font_texture.data = (unsigned char*) malloc(biSizeImage);
+
+	fseek(fp, bfOffBits, SEEK_SET);
+
+	fread(font_texture.data, biSizeImage, 1, fp);
+
+	/* bgr -> rgb */
+	unsigned char temp;
+	int i;
+	for (i = 0; i < biSizeImage; i += 3)
+    {
+        temp = font_texture.data[i];
+        font_texture.data[i] = font_texture.data[i + 2];
+        font_texture.data[i + 2] = temp;
+    }
+
+	glGenTextures(1,&ft_out->texture);
+	glBindTexture(GL_TEXTURE_2D,ft_out->texture);
+
+	glTexImage2D(GL_TEXTURE_2D, 0, 3, font_texture.width,
+				 font_texture.height, 0, GL_RGB, GL_UNSIGNED_BYTE,
+				 font_texture.data);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+	ft_out->list_base = glGenLists(256);
+
+	float cx,cy;
+	int loop;
+	for (loop = 0; loop < 256; loop++)
+    {
+        cx = (float) (loop % 16) / 16.0f;
+        cy = (float) (loop / 16) / 16.0f;
+
+		glNewList(ft_out->list_base + loop, GL_COMPILE);
+		 glBegin(GL_QUADS);
+		  glTexCoord2f(cx, 1 - cy - 0.0625f);
+		  glVertex3f(0.0f, 0.0f, 0.0f);
+
+		  glTexCoord2f(cx + 0.0625f, 1 - cy - 0.0625f);
+		  glVertex3f(0.5,0.0,0.0);
+
+		  glTexCoord2f(cx + 0.0625f, 1 - cy);
+		  glVertex3f(0.5f, 0.5f, 0.0f);
+
+		  glTexCoord2f(cx, 1 - cy);
+		  glVertex3f(0.0f, 0.5f, 0.0f);
+		 glEnd();
+
+		 glTranslatef(0.4f, 0.0f, 0.0f);
+        glEndList();
+    }
+
+	free(font_texture.data);
+	fclose(fp);
+
+    return 0;
+}
+
+void font_destroy(struct font* ft)
+{
+	glDeleteLists(ft->list_base,256);
+	glDeleteTextures(1,&ft->texture);
+}
+
+
+void font_render(struct font* ft,GLfloat x, GLfloat y, char *string, int set)
+{
+	glBindTexture(GL_TEXTURE_2D, ft->texture);
+	glPushMatrix();
+	glTranslatef(x,y,0.0f);
+	glListBase(ft->list_base +(128*set));
+	glCallLists(strlen(string),GL_BYTE,string);
+	glPopMatrix();
+}
+
 int init_gfx(GLvoid)
 {
     const SDL_VideoInfo *videoInfo;
 
     if( SDL_Init( SDL_INIT_VIDEO ) < 0 )
-	{
-	    fprintf( stderr, "Video initialization failed: %s\n",
-		     SDL_GetError( ) );
-	    quit( 1 );
-	}
-
+		return -1;
 
     videoInfo = SDL_GetVideoInfo( );
 
     if ( !videoInfo )
-	{
-	    fprintf( stderr, "Video query failed: %s\n",
-		     SDL_GetError( ) );
-	    quit( 1 );
-	}
+		return -1;
 
     /* the flags to pass to SDL_SetVideoMode */
     videoFlags  = SDL_OPENGL;          /* Enable OpenGL in SDL */
@@ -576,10 +701,7 @@ int init_gfx(GLvoid)
 
     /* Verify there is a surface */
     if ( !surface )
-	{
-	    fprintf( stderr,  "Video mode set failed: %s\n", SDL_GetError( ) );
-	    quit( 1 );
-	}
+		return -1;
 
 	/* setup OpenGL */
 	glShadeModel(GL_SMOOTH);
@@ -588,17 +710,18 @@ int init_gfx(GLvoid)
 
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 	glEnable(GL_TEXTURE_2D);
 
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
 
 	/* set window size */
     win_resize ( SCREEN_WIDTH, SCREEN_HEIGHT );
 
-    return TRUE;
+	glFlush();
+
+    return 0;
 }
 
 void draw_block(double x,double y,struct rgb color)
@@ -630,6 +753,9 @@ int render(GLvoid)
     glLoadIdentity();
     glTranslatef(0.0f, 0.0f, -25.0f);
 
+	glDisable(GL_BLEND);
+	glDisable(GL_TEXTURE_2D);
+
 	/* draw background */
 	glColor3f(0.1f,0.1f,0.1f);
     glBegin( GL_QUADS );
@@ -650,10 +776,12 @@ int render(GLvoid)
 	draw_figure(gx,gy);
 
 	/* draw grid */
+
+	glColor3f(0.0f,0.0f,0.0f);
+
 	double i,j;
 	for(i=-5.0;i<5.0;i++)
 	{
-		glColor3f(0.0f,0.0f,0.0f);
 		glBegin(GL_LINES);
 			glVertex3f(i,10.0,0.0f);
 			glVertex3f(i,-10.0,0.0f);
@@ -661,22 +789,23 @@ int render(GLvoid)
 	}
 	for(j=-10.0;j<10.0;j++)
 	{
-		glColor3f(0.0f,0.0f,0.0f);
 		glBegin(GL_LINES);
 			glVertex3f(-5.0,j,0.0f);
 			glVertex3f(5.0,j,0.0f);
 		glEnd();
 	}
 
+	glEnable(GL_BLEND);
+	glEnable(GL_TEXTURE_2D);
+	//glLoadIdentity();
+
 	/* draw scores and level */
-	glColor3f(1.0,1.0,1.0);
+	glColor3f(COLOR_TEXT);
 	char tmp[128];
+	snprintf(tmp,120,"Level: %i",score / 100);
+	font_render(&game_font,6.0,2.0,tmp,0);
 	snprintf(tmp,120,"Score: %i",score);
-	glRasterPos3f(6.0,1.0,0.0);
-	ftglRenderFont(Font, tmp, FTGL_RENDER_ALL);
-	snprintf(tmp,120,"Level: %i",100 - speed/10);
-	glRasterPos3f(6.0,2.0,0.0);
-	ftglRenderFont(Font, tmp, FTGL_RENDER_ALL);
+	font_render(&game_font,6.0,1.0,tmp,0);
 
     /* Draw it to the screen */
     SDL_GL_SwapBuffers( );
@@ -705,19 +834,21 @@ int main( int argc, char **argv )
 	fi = rand() % 7;
 	cur_figure = figures[fi];
 
-
-
 	printf("%s","Video initialization...");
-	init_gfx();
 
-	if(!(Font=ftglCreatePixmapFont("Terminus.ttf")))
+	if( init_gfx() < 0 )
 	{
-		printf("\n%s\n","Can not load font");
-		return 1;
+		printf("%s\n","FAIL: Graphics init failed");
+		quit(1);
 	}
-	ftglSetFontFaceSize(Font, 14, 14);
+	if( font_load("font.bmp",&game_font) < 0 )
+	{
+		printf("%s\n","FAIL: Can not load font");
+		quit(1);
+	}
 
 	SDL_WM_SetCaption("Zenburn Tetris",NULL);
+
 	printf("%s","OK\n");
 
 	/*
