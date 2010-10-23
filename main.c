@@ -841,7 +841,7 @@ int main( int argc, char **argv )
 		printf("%s\n","FAIL: Graphics init failed");
 		quit(1);
 	}
-	if( font_load("font.bmp",&game_font) < 0 )
+	if( font_load("data/font.bmp",&game_font) < 0 )
 	{
 		printf("%s\n","FAIL: Can not load font");
 		quit(1);
