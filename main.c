@@ -4,6 +4,7 @@
 #include <GL/glu.h>
 #include <SDL.h>
 #include <time.h>
+#include <math.h>
 
 #define SCREEN_WIDTH  640
 #define SCREEN_HEIGHT 480
@@ -30,10 +31,11 @@ int videoFlags;
 /* global game variables */
 double gx;
 double gy;
-unsigned int fi;
+unsigned int fi[2];
 unsigned int speed;
 unsigned int ticks;
 unsigned int score;
+unsigned short game_over;
 
 /* basic game structures */
 struct vec2
@@ -337,20 +339,26 @@ int fig_check_collision_turn(int fig_x,int fig_y)
 
 	int i;
 	struct list* iter = l_root;
-	while(iter)
+
+	do
 	{
 		for(i=0;i<4;i++)
 		{
-			if((iter->pos.x == f.points[f.state][i].x+fig_x &&
-				iter->pos.y == f.points[f.state][i].y+fig_y) ||
-				f.points[f.state][i].x+fig_x < 1 ||
-			    f.points[f.state][i].x+fig_x > 10 ||
-			    f.points[f.state][i].y + fig_y > 20)
+			if(iter &&
+			   iter->pos.x == f.points[f.state][i].x+fig_x &&
+			   iter->pos.y == f.points[f.state][i].y+fig_y)
+				return 1;
+
+			if(f.points[f.state][i].x + fig_x < 1 ||
+			   f.points[f.state][i].x + fig_x > 10 ||
+			   f.points[f.state][i].y + fig_y > 20)
 				return 1;
 		}
 
-		iter = iter->next;
-	}
+		if(iter)
+			iter = iter->next;
+
+	} while(iter);
 
 	return 0;
 }
@@ -465,25 +473,21 @@ unsigned int on_timer(unsigned int interval,void* param)
 
 void on_collision(void)
 {
-	if( (gy == (20 - fig_size(fi).y)) || (fig_check_collision_y(gx,gy) == 1))
+	if( (gy == (20 - fig_size(fi[0]).y)) || (fig_check_collision_y(gx,gy) == 1))
 	{
 		fig_fallen();
 
-		if(gy<1)
-		{
-			printf("Loser!\n");
-			quit(0);
-		}
-
+		if(gy<1) game_over=1;
 
 		if(score % 100 == 0 && score>0 && speed > 50)
 			speed -= 50;
 
-		fi = rand() % 7;
-		cur_figure = figures[fi];
+		fi[0] = fi[1];
+		fi[1] = rand() % 7;
+		cur_figure = figures[fi[0]];
 
-		gy=-3;
-		gx= 5 - cur_figure.size.x;
+		gy=-1;
+		gx= 5 - floor(cur_figure.size.x / 2);
 	}
 }
 
@@ -518,24 +522,11 @@ void on_key(SDL_keysym *keysym)
 		on_collision();
 		break;
 	case SDLK_DOWN:
-		while((fig_check_collision_y(gx,gy) == 0) && gy < (20-fig_size(fi).y))
+		while((fig_check_collision_y(gx,gy) == 0) &&
+			  (gy < (20-fig_size(fi[0]).y)))
 			gy++;
 
 		on_collision();
-		break;
-	case SDLK_q:
-		if(fi<6)
-		{
-			fi++;
-			cur_figure = figures[fi];
-		}
-		break;
-	case SDLK_e:
-		if(fi>0)
-		{
-			fi--;
-			cur_figure = figures[fi];
-		}
 		break;
 	default:
 	    break;
@@ -724,8 +715,54 @@ int init_gfx(GLvoid)
     return 0;
 }
 
+void draw_message(struct vec2 rect[2],struct rgb color,struct rgb text_color,char* text)
+{
+
+	char* local_s = (char*) malloc(sizeof(char)*strlen(text)+1);
+	strcpy(local_s,text);
+
+	char* cur_str = strtok(local_s,"\n");
+
+
+	glDisable(GL_TEXTURE_2D);
+	glDisable(GL_BLEND);
+
+	glColor3f(color.r,color.g,color.b);
+
+	glBegin(GL_QUADS);
+	glVertex3f( rect[0].x, rect[0].y, 0.0);
+	glVertex3f( rect[0].x, rect[1].y, 0.0);
+	glVertex3f( rect[1].x, rect[1].y, 0.0);
+	glVertex3f( rect[1].x, rect[0].y, 0.0);
+	glEnd();
+
+	glEnable(GL_BLEND);
+	glEnable(GL_TEXTURE_2D);
+
+	glColor3f(text_color.r,text_color.g,text_color.b);
+
+	int i = 0;
+	while(cur_str)
+	{
+		font_render(&game_font,
+					rect[0].x+(rect[1].x - rect[0].x)/2 - strlen(cur_str)*0.2,
+					rect[1].y-(rect[1].y - rect[0].y)/2 - 0.5*i,
+					cur_str,0);
+
+		cur_str = strtok(NULL,"\n");
+		i++;
+	}
+
+	free(local_s);
+
+	glDisable(GL_TEXTURE_2D);
+	glDisable(GL_BLEND);
+}
+
 void draw_block(double x,double y,struct rgb color)
 {
+	if(y<=0) return;
+
 	struct vec2 glob_coord = local2global(x,y);
 
 	glColor3f(color.r,color.g,color.b);
@@ -737,13 +774,13 @@ void draw_block(double x,double y,struct rgb color)
     glEnd( );                           /* Done Drawing The Quad */
 }
 
-void draw_figure(double fig_x,double fig_y)
+void draw_figure(double fig_x,double fig_y,struct figure* f)
 {
 	int i;
 	for(i=0;i<4;i++)
-		draw_block(cur_figure.points[cur_figure.state][i].x+fig_x,
-				   cur_figure.points[cur_figure.state][i].y+fig_y,
-				   cur_figure.color);
+		draw_block(f->points[f->state][i].x+fig_x,
+				   f->points[f->state][i].y+fig_y,
+				   f->color);
 }
 
 int render(GLvoid)
@@ -757,7 +794,7 @@ int render(GLvoid)
 	glDisable(GL_TEXTURE_2D);
 
 	/* draw background */
-	glColor3f(0.1f,0.1f,0.1f);
+	glColor3f(COLOR_BG);
     glBegin( GL_QUADS );
       glVertex3f( -5.0f,  10.0f, 0.0f );
       glVertex3f(  5.0f,  10.0f, 0.0f );
@@ -773,11 +810,11 @@ int render(GLvoid)
 	}
 
 	/* draw figure */
-	draw_figure(gx,gy);
+	draw_figure(gx,gy,&cur_figure);
 
 	/* draw grid */
 
-	glColor3f(0.0f,0.0f,0.0f);
+	glColor4f(0.0f,0.0f,0.0f,1.0f);
 
 	double i,j;
 	for(i=-5.0;i<5.0;i++)
@@ -795,17 +832,50 @@ int render(GLvoid)
 		glEnd();
 	}
 
-	glEnable(GL_BLEND);
-	glEnable(GL_TEXTURE_2D);
-	//glLoadIdentity();
+	/* draw next figure preview */
+
+	glColor3f(COLOR_BG);
+    glBegin( GL_QUADS );
+	glVertex3f(  6.0f,  3.0f, 0.0f );
+	glVertex3f(  6.0f,  7.0f, 0.0f );
+	glVertex3f(  10.0f, 7.0, 0.0f );
+	glVertex3f(  10.0f, 3.0f, 0.0f );
+    glEnd( );
+
+	draw_figure(11.0,3.0,&figures[fi[1]]);
+
+	glColor3f(0.0,0.0,0.0);
+	for(i=6.0;i<10.0;i++)
+	{
+		glBegin(GL_LINES);
+		glVertex3f(i,3.0,0.0f);
+		glVertex3f(i,7.0,0.0f);
+		glEnd();
+	}
+	for(j=3.0;j<7.0;j++)
+	{
+		glBegin(GL_LINES);
+		glVertex3f(6.0f,j,0.0f);
+		glVertex3f(10.0f,j,0.0f);
+		glEnd();
+	}
+
+	/* draw game over message */
+	if(game_over)
+	{
+		struct vec2 end_msg_rect[2] = {{-5.0,-3.0},{5.0,3.0}};
+		draw_message(end_msg_rect,
+					 (struct rgb){0.2,0.0,0.0},
+					 (struct rgb){COLOR_TEXT},
+					 "This is the end.\nPress <ESC> to quit");
+	}
 
 	/* draw scores and level */
-	glColor3f(COLOR_TEXT);
-	char tmp[128];
-	snprintf(tmp,120,"Level: %i",score / 100);
-	font_render(&game_font,6.0,2.0,tmp,0);
-	snprintf(tmp,120,"Score: %i",score);
-	font_render(&game_font,6.0,1.0,tmp,0);
+	char scores_buf[64];
+	snprintf(scores_buf,60,"Level: %i\nScore: %i",score / 100,score);
+
+	struct vec2 scores_rect[2] = {{5.5,0.0},{10.0,2.0}};
+	draw_message(scores_rect,(struct rgb){COLOR_BG},(struct rgb){COLOR_TEXT},scores_buf);
 
     /* Draw it to the screen */
     SDL_GL_SwapBuffers( );
@@ -826,13 +896,18 @@ int main( int argc, char **argv )
 	srand(time(NULL));
 
 	l_root = NULL;
-	gx = 4.0f;
-	gy = 0.0f;
 	speed = 1000;
 	ticks = 0;
 	score = 0;
-	fi = rand() % 7;
-	cur_figure = figures[fi];
+	game_over = 0;
+
+	fi[0] = rand() % 7;
+	fi[1] = rand() % 7;
+
+	cur_figure = figures[fi[0]];
+
+	gx = 5.0 - floor(cur_figure.size.x/2);
+	gy = -1.0f;
 
 	printf("%s","Video initialization...");
 
@@ -913,13 +988,14 @@ int main( int argc, char **argv )
 
 		if( (SDL_GetTicks() - ticks) >= speed )
 		{
-			gy++;
 			ticks = SDL_GetTicks();
 
-			check_fill();
+			if(!game_over){
+				gy++;
+				check_fill();
 
-			/* collision check */
-			on_collision();
+				on_collision();
+			}
 		}
 
 
