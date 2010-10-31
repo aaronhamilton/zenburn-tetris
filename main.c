@@ -36,6 +36,13 @@ unsigned int speed;
 unsigned int ticks;
 unsigned int score;
 unsigned short game_over;
+unsigned keys[2];
+
+enum key
+{
+	key_hscore = 0,
+	key_help = 1
+};
 
 /* basic game structures */
 struct vec2
@@ -65,6 +72,12 @@ struct font
 	GLuint list_base;
 }game_font;
 
+struct player
+{
+	char name[16];
+	unsigned int score;
+};
+
 struct list
 {
 	struct vec2 pos;
@@ -74,6 +87,20 @@ struct list
 
 /* proto */
 void font_destroy(struct font*);
+
+/* highscore list*/
+struct player high_score[10] = {
+	{"Nobody", 500},
+	{"Nobody", 1000},
+	{"Nobody", 3000},
+	{"Nobody", 5000},
+	{"Nobody", 7000},
+	{"Nobody", 10000},
+	{"Nobody", 30000},
+	{"Nobody", 50000},
+	{"Nobody", 70000},
+	{"Nobody", 100000}
+};
 
 /* blocks */
 struct figure figures[7]  = {
@@ -249,6 +276,7 @@ void quit(int ret_code)
 {
 	font_destroy(&game_font);
 	printf("%s\n","Good bye!");
+	highscore_save("scores");
     SDL_Quit();
     exit(ret_code);
 }
@@ -331,7 +359,7 @@ int check_fill(void)
 
 	return 1;
 }
-
+/* TODO: make one function for collisions checking */
 int fig_check_collision_turn(int fig_x,int fig_y)
 {
 	struct figure f = cur_figure;
@@ -477,7 +505,23 @@ void on_collision(void)
 	{
 		fig_fallen();
 
-		if(gy<1) game_over=1;
+		if(gy<1)
+		{
+			game_over=1;
+
+			int hst_i;
+			for(hst_i=9;hst_i>=0;hst_i--)
+			{
+				if(score > high_score[hst_i].score)
+				{
+					high_score[hst_i].score = score;
+					memset(high_score[hst_i].name,0,16);
+					strncpy(high_score[hst_i].name,getenv("USER"),15);
+					break;
+				}
+			}
+		}
+
 
 		if(score % 100 == 0 && score>0 && speed > 50)
 			speed -= 50;
@@ -491,14 +535,37 @@ void on_collision(void)
 	}
 }
 
-void on_key(SDL_keysym *keysym)
+void on_key_up(SDL_keysym *keysym)
+{
+	switch (keysym->sym)
+	{
+	case SDLK_s:
+		keys[key_hscore] = 0;
+		break;
+	case SDLK_F1:
+	case SDLK_h:
+		keys[key_help] = 0;
+		break;
+	case SDLK_DOWN:
+		while((fig_check_collision_y(gx,gy) == 0) &&
+			  (gy < (20-fig_size(fi[0]).y)))
+			gy++;
+
+		on_collision();
+		break;
+	default:
+		break;
+	}
+}
+
+void on_key_down(SDL_keysym *keysym)
 {
     switch (keysym->sym)
 	{
 	case SDLK_ESCAPE:
 	    quit(0);
 	    break;
-	case SDLK_F1:
+	case SDLK_f:
 	    SDL_WM_ToggleFullScreen(surface);
 	    break;
 	case SDLK_LEFT:
@@ -521,16 +588,54 @@ void on_key(SDL_keysym *keysym)
 
 		on_collision();
 		break;
-	case SDLK_DOWN:
-		while((fig_check_collision_y(gx,gy) == 0) &&
-			  (gy < (20-fig_size(fi[0]).y)))
-			gy++;
-
-		on_collision();
+	case SDLK_s:
+		keys[key_hscore] = 1;
+		break;
+	case SDLK_F1:
+	case SDLK_h:
+		keys[key_help] = 1;
 		break;
 	default:
 	    break;
 	}
+}
+
+int highscore_load(char* filename)
+{
+	FILE* hsfp;
+
+	if((hsfp = fopen(filename,"r")))
+	{
+		char in_buf[64];
+		int i=0;
+
+		while(fgets(in_buf,63,hsfp))
+		{
+			if(!sscanf(in_buf,"%s %i",high_score[i].name,&high_score[i].score))
+				break;
+
+			i++;
+		}
+
+		fclose(hsfp);
+	}
+	else
+		return -1;
+
+
+	return 0;
+}
+
+int highscore_save(char* filename)
+{
+	FILE* hsfp;
+	if(!(hsfp = fopen(filename,"w")))
+		return -1;
+
+	int i;
+	for(i=0;i<10;i++)
+		fprintf(hsfp,"%s %i\n",high_score[i].name,high_score[i].score);
+
 }
 
 int font_load(char* file,struct font* ft_out)
@@ -721,9 +826,6 @@ void draw_message(struct vec2 rect[2],struct rgb color,struct rgb text_color,cha
 	char* local_s = (char*) malloc(sizeof(char)*strlen(text)+1);
 	strcpy(local_s,text);
 
-	char* cur_str = strtok(local_s,"\n");
-
-
 	glDisable(GL_TEXTURE_2D);
 	glDisable(GL_BLEND);
 
@@ -741,12 +843,19 @@ void draw_message(struct vec2 rect[2],struct rgb color,struct rgb text_color,cha
 
 	glColor3f(text_color.r,text_color.g,text_color.b);
 
-	int i = 0;
+	int lines_num=1;
+	char* it = local_s;
+	while(*it)
+		if (*it++ == '\n') lines_num++;
+
+	char* cur_str = strtok(local_s,"\n");
+
+	int i = 1;
 	while(cur_str)
 	{
 		font_render(&game_font,
 					rect[0].x+(rect[1].x - rect[0].x)/2 - strlen(cur_str)*0.2,
-					rect[1].y-(rect[1].y - rect[0].y)/2 - 0.5*i,
+					rect[0].y+(rect[1].y - rect[0].y)/2 + lines_num*0.3 - i*0.6,
 					cur_str,0);
 
 		cur_str = strtok(NULL,"\n");
@@ -860,6 +969,13 @@ int render(GLvoid)
 		glEnd();
 	}
 
+   /* draw scores and level */
+	char scores_buf[64];
+	snprintf(scores_buf,60,"Level: %i\nScore: %i",score / 100,score);
+
+	struct vec2 scores_rect[2] = {{5.5,0.0},{10.0,2.0}};
+	draw_message(scores_rect,(struct rgb){COLOR_BG},(struct rgb){COLOR_TEXT},scores_buf);
+
 	/* draw game over message */
 	if(game_over)
 	{
@@ -869,13 +985,56 @@ int render(GLvoid)
 					 (struct rgb){COLOR_TEXT},
 					 "This is the end.\nPress <ESC> to quit");
 	}
+	/* draw help message */
+	if(keys[key_help] == 1)
+	{
+		char help_msg[] = "        HELP        \n \n"
+			"Keys:                      \n"
+			" <left> - move shape left  \n"
+			" <right> - move shape right\n"
+			" <up> - turn shape         \n"
+			" <down> - drop shape       \n"
+			" <ESC> - exit              \n"
+			" hold <s> - show highscore \n"
+			" hold <h> or <F1> -  help  ";
 
-	/* draw scores and level */
-	char scores_buf[64];
-	snprintf(scores_buf,60,"Level: %i\nScore: %i",score / 100,score);
+		struct vec2 help_msg_rect[2] = {{-7.0,-4.0},{7.0,4.0}};
+		draw_message(help_msg_rect,(struct rgb){COLOR_BG},(struct rgb){COLOR_TEXT},help_msg);
+	}
+	/* draw highscores */
+	if(keys[key_hscore] == 1)
+	{
+		char hscore_text[256];
+		memset(hscore_text,0,256);
+		/* FIXME: buffer overrun in hscore_text */
 
-	struct vec2 scores_rect[2] = {{5.5,0.0},{10.0,2.0}};
-	draw_message(scores_rect,(struct rgb){COLOR_BG},(struct rgb){COLOR_TEXT},scores_buf);
+		int hst_i;
+		for(hst_i = 9;hst_i>=0;hst_i--)
+		{
+			strcat(hscore_text,high_score[hst_i].name);
+
+			char scrval_tmp[32];
+			snprintf(scrval_tmp,30,"%i\n",high_score[hst_i].score);
+
+			char spaces[16];
+			int spaces_count = 20 - strlen(high_score[hst_i].name) - strlen(scrval_tmp);
+			if(spaces_count)
+			{
+				memset(spaces,0,16);
+
+				for(;spaces_count>=0;spaces_count--)
+				{
+					spaces[spaces_count] = '.';
+				}
+			}
+			strcat(hscore_text,spaces);
+			strcat(hscore_text,scrval_tmp);
+		}
+
+		struct vec2 highscore_rect[2] = {{-5.0,-4.0},{5.0,4.0}};
+		draw_message(highscore_rect,(struct rgb){0.3,0.3,0.3},(struct rgb){COLOR_TEXT},hscore_text);
+	}
+
 
     /* Draw it to the screen */
     SDL_GL_SwapBuffers( );
@@ -887,6 +1046,8 @@ int render(GLvoid)
  * -l <n>      set level
  * -f          fullscreen mode
  * -s <w>x<h>  set window size
+ * FIXME:
+ * high CPU usage, need to use a timer
 */
 int main( int argc, char **argv )
 {
@@ -923,6 +1084,8 @@ int main( int argc, char **argv )
 	}
 
 	SDL_WM_SetCaption("Zenburn Tetris",NULL);
+	SDL_EnableKeyRepeat(100,100);
+	highscore_load("scores");
 
 	printf("%s","OK\n");
 
@@ -975,8 +1138,11 @@ int main( int argc, char **argv )
 			    break;
 			case SDL_KEYDOWN:
 			    /* handle key presses */
-			    on_key( &event.key.keysym );
+			    on_key_down( &event.key.keysym);
 			    break;
+			case SDL_KEYUP:
+				on_key_up(&event.key.keysym);
+				break;
 			case SDL_QUIT:
 			    /* handle quit requests */
 			    done = TRUE;
@@ -990,7 +1156,7 @@ int main( int argc, char **argv )
 		{
 			ticks = SDL_GetTicks();
 
-			if(!game_over){
+			if(!game_over && !keys[0] && !keys[1]){
 				gy++;
 				check_fill();
 

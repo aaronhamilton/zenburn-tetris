@@ -1,4 +1,10 @@
 This is just another tetris clone written in C using OpenG and SDL.
 to build the game run make
 
-Controls: left,right - move; up - turn; down - drop
+Controls:
+	hold <F1>, <h> - show help
+	hold <s>       - show highscore
+	<left>    	   - move shape left
+	<right>   	   - move shape right
+	<up> 	  	   - turn shape
+	<down>  	   - drop shape
