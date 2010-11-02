@@ -17,9 +17,9 @@ clean:
 
 install: all
 	strip zenburn_tetris
-	install -c zenburn_tetris $(bindir)/zb_tetris
+	install -D zenburn_tetris $(bindir)/zb_tetris
 	mkdir $(datadir)/zenburn_tetris
-	install -c data/font.bmp $(datadir)/zenburn_tetris/font.bmp
+	install -D data/font.bmp $(datadir)/zenburn_tetris/font.bmp
 
 uninstall:
 	rm $(bindir)/zb_tetris
