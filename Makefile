@@ -15,7 +15,7 @@ clean:
 	rm config.h
 #	rm $(EXE)
 
-install: all
+install:
 	strip zenburn_tetris
 	install -D zenburn_tetris $(bindir)/zb_tetris
 	mkdir -p $(datadir)/zenburn_tetris
