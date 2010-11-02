@@ -5,6 +5,9 @@
 #include <SDL.h>
 #include <time.h>
 #include <math.h>
+#include <sys/stat.h>
+
+#include "config.h"
 
 #define SCREEN_WIDTH  640
 #define SCREEN_HEIGHT 480
@@ -90,16 +93,16 @@ void font_destroy(struct font*);
 
 /* highscore list*/
 struct player high_score[10] = {
+	{"Nobody", 30},
+	{"Nobody", 50},
+	{"Nobody", 100},
+	{"Nobody", 200},
+	{"Nobody", 300},
+	{"Nobody", 400},
 	{"Nobody", 500},
 	{"Nobody", 1000},
-	{"Nobody", 3000},
 	{"Nobody", 5000},
-	{"Nobody", 7000},
-	{"Nobody", 10000},
-	{"Nobody", 30000},
-	{"Nobody", 50000},
-	{"Nobody", 70000},
-	{"Nobody", 100000}
+	{"Nobody", 10000}
 };
 
 /* blocks */
@@ -272,12 +275,34 @@ unsigned int l_count(double x,double y)
 
 /* end of list stuff */
 
+char* highscores_get_file(void)
+{
+	struct stat fst;
+
+	char* temp = (char*) malloc(sizeof(char)*(strlen(getenv("XDG_CONFIG_HOME"))+strlen("/zenburn_tetris/")+1));
+	strcpy(temp,getenv("XDG_CONFIG_HOME"));
+	strcat(temp,"/zenburn_tetris/");
+
+	if(stat(temp,&fst) == -1)
+		mkdir(temp,S_IRWXU | S_IXGRP | S_IRGRP | S_IXOTH);
+
+	return temp;
+}
+
 void quit(int ret_code)
 {
 	font_destroy(&game_font);
 	printf("%s\n","Good bye!");
-	highscore_save("scores");
-    SDL_Quit();
+
+	char* hsdir;
+
+	if((hsdir = highscores_get_file()))
+	{
+		highscore_save(hsdir);
+		free(hsdir);
+	}
+
+	SDL_Quit();
     exit(ret_code);
 }
 
@@ -353,7 +378,7 @@ int check_fill(void)
 				iter = iter->next;
 			}
 
-			score+=(1000/speed)*10;
+			score++;
 		}
 	}
 
@@ -523,8 +548,8 @@ void on_collision(void)
 		}
 
 
-		if(score % 100 == 0 && score>0 && speed > 50)
-			speed -= 50;
+		if(score % 10 == 0 && score>0 && speed > 20)
+				speed -= 10;
 
 		fi[0] = fi[1];
 		fi[1] = rand() % 7;
@@ -600,11 +625,15 @@ void on_key_down(SDL_keysym *keysym)
 	}
 }
 
-int highscore_load(char* filename)
+int highscore_load(char* dir)
 {
 	FILE* hsfp;
 
-	if((hsfp = fopen(filename,"r")))
+	char* full_path = (char*)malloc(sizeof(char)*(strlen(dir)+strlen("scores")+1));
+	strcpy(full_path,dir);
+	strcat(full_path,"scores");
+
+	if((hsfp = fopen(full_path,"r")))
 	{
 		char in_buf[64];
 		int i=0;
@@ -620,22 +649,36 @@ int highscore_load(char* filename)
 		fclose(hsfp);
 	}
 	else
+	{
+		free(full_path);
 		return -1;
+	}
 
+	free(full_path);;
 
 	return 0;
 }
 
-int highscore_save(char* filename)
+int highscore_save(char* dir)
 {
 	FILE* hsfp;
-	if(!(hsfp = fopen(filename,"w")))
+
+	char* full_path = (char*)malloc(sizeof(char)*(strlen(dir)+strlen("scores")+1));
+	strcpy(full_path,dir);
+	strcat(full_path,"scores");
+
+	if(!(hsfp = fopen(full_path,"w")))
+	{
+		printf("%s",full_path);
+		free(full_path);
 		return -1;
+	}
 
 	int i;
 	for(i=0;i<10;i++)
 		fprintf(hsfp,"%s %i\n",high_score[i].name,high_score[i].score);
 
+	free(full_path);
 }
 
 int font_load(char* file,struct font* ft_out)
@@ -971,7 +1014,7 @@ int render(GLvoid)
 
    /* draw scores and level */
 	char scores_buf[64];
-	snprintf(scores_buf,60,"Level: %i\nScore: %i",score / 100,score);
+	snprintf(scores_buf,60,"Level: %i\nLines: %i",score / 10,score);
 
 	struct vec2 scores_rect[2] = {{5.5,0.0},{10.0,2.0}};
 	draw_message(scores_rect,(struct rgb){COLOR_BG},(struct rgb){COLOR_TEXT},scores_buf);
@@ -1077,15 +1120,21 @@ int main( int argc, char **argv )
 		printf("%s\n","FAIL: Graphics init failed");
 		quit(1);
 	}
-	if( font_load("data/font.bmp",&game_font) < 0 )
+	if( font_load( DATA_DIR"/font.bmp",&game_font ) < 0 )
 	{
-		printf("%s\n","FAIL: Can not load font");
+		printf("%s %s\n","FAIL: Can not load font:",DATA_DIR"/font.bmp");
 		quit(1);
 	}
 
 	SDL_WM_SetCaption("Zenburn Tetris",NULL);
 	SDL_EnableKeyRepeat(100,100);
-	highscore_load("scores");
+
+	char* hsdir = NULL;
+	if((hsdir = highscores_get_file()))
+	{
+		highscore_load(hsdir);
+		free(hsdir);
+	}
 
 	printf("%s","OK\n");
 
@@ -1156,7 +1205,7 @@ int main( int argc, char **argv )
 		{
 			ticks = SDL_GetTicks();
 
-			if(!game_over && !keys[0] && !keys[1]){
+			if(!game_over && !keys[0] && !keys[1] && isActive){
 				gy++;
 				check_fill();
 

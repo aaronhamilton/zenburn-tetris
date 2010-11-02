@@ -1,7 +1,27 @@
+prefix=/usr/local
+bindir=$(prefix)/bin
+datadir=$(prefix)/share
+
 CC=gcc
 EXE=zenburn_tetris
 FLAGS=`pkg-config --cflags --libs sdl` -lGL -lGLU
 SRC=main.c
 
 all: $(SRC)
-	$(CC) $(FLAGS) main.c -o $(EXE)
+	echo "#define DATA_DIR \"$(datadir)/zenburn_tetris\"" > config.h
+	$(CC) $(FLAGS) main.c -o $(EXE)	
+
+clean:
+	rm config.h
+#	rm $(EXE)
+
+install: all
+	strip zenburn_tetris
+	install -c zenburn_tetris $(bindir)/zb_tetris
+	mkdir $(datadir)/zenburn_tetris
+	install -c data/font.bmp $(datadir)/zenburn_tetris/font.bmp
+
+uninstall:
+	rm $(bindir)/zb_tetris
+	rm $(datadir)/zenburn_tetris/font.bmp
+	rmdir $(datadir)/zenburn_tetris
