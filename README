@@ -1,10 +1,4 @@
 This is just another tetris clone written in C using OpenG and SDL.
-to build the game run "make && make install", you can use "make prefix=<PATH> ..." to set custom setup path
 
-Controls:
-	hold <F1>, <h> - show help
-	hold <s>       - show highscore
-	<left>    	   - move shape left
-	<right>   	   - move shape right
-	<up> 	  	   - turn shape
-	<down>  	   - drop shape
+to build the game run "make && make install", you can use "make prefix=<PATH> && make prefix=<PATH> install" to set custom setup path.
+and also you can run "make local" to build game without installation
